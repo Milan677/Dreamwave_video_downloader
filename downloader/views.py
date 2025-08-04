@@ -298,48 +298,6 @@ def video_meta_view(request):
 
 
 
-
-
-
-# @api_view(['POST'])
-# def download_merged_video(request):
-#     url = request.data.get("url")
-#     resolution = request.data.get("resolution")  # e.g. "720p"
-
-#     if not url or not resolution:
-#         return Response({'error': 'url and resolution are required'}, status=status.HTTP_400_BAD_REQUEST)
-
-#     try:
-#         # Remove "p" to get height (e.g., "720p" -> "720")
-#         height = resolution.replace("p", "")
-#         format_string = f"bestvideo[height={height}]+bestaudio"
-
-#         temp_dir = tempfile.mkdtemp()
-#         output_file = os.path.join(temp_dir, f"merged_{uuid.uuid4()}.mp4")
-
-#         ydl_opts = {
-#             'format': format_string,
-#             'outtmpl': output_file,
-#             'merge_output_format': 'mp4',
-#             'quiet': True,
-#             'nocheckcertificate': True,
-#         }
-
-#         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-#             ydl.download([url])
-
-#         filename = os.path.basename(output_file)
-#         response = FileResponse(open(output_file, 'rb'), as_attachment=True, filename=filename)
-#         return response
-
-#     except Exception as e:
-#         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
-
-
-
 def sanitize_filename(title):
     # Remove invalid characters for filenames
     return re.sub(r'[\\/*?:"<>|]', "_", title)
@@ -388,6 +346,141 @@ def download_merged_video(request):
             'quiet': True,
             'nocheckcertificate': True,
         }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+
+        response = FileResponse(open(output_file, 'rb'), as_attachment=True)
+        response['Content-Disposition'] = f'attachment; filename="{os.path.basename(output_file)}"'
+        return response
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+# @api_view(['POST'])
+# def download_merged_video(request):
+#     url = request.data.get("url")
+#     resolution = request.data.get("resolution")  # e.g. "720p"
+
+#     if not url or not resolution:
+#         return Response({'error': 'url and resolution are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+#     try:
+#         # Remove "p" to get height (e.g., "720p" -> "720")
+#         height = resolution.replace("p", "")
+#         format_string = f"bestvideo[height={height}]+bestaudio"
+
+#         temp_dir = tempfile.mkdtemp()
+#         output_file = os.path.join(temp_dir, f"merged_{uuid.uuid4()}.mp4")
+
+#         ydl_opts = {
+#             'format': format_string,
+#             'outtmpl': output_file,
+#             'merge_output_format': 'mp4',
+#             'quiet': True,
+#             'nocheckcertificate': True,
+#         }
+
+#         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+#             ydl.download([url])
+
+#         filename = os.path.basename(output_file)
+#         response = FileResponse(open(output_file, 'rb'), as_attachment=True, filename=filename)
+#         return response
+
+#     except Exception as e:
+#         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+#.......... instagram............................
+from urllib.parse import urlparse
+
+@api_view(['POST'])
+def video_meta_view_instagram(request):
+    url = request.data.get("url")
+    if not url:
+        return Response({'error': 'URL is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # Basic platform detection
+        hostname = urlparse(url).hostname or ""
+        platform = "instagram" if "instagram" in hostname else "youtube"
+
+        ydl_opts = {
+            'quiet': True,
+            'skip_download': True,
+            'nocheckcertificate': True,
+            'cookiefile': 'cookies.txt' if platform == "instagram" else None,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+
+            resolutions = set()
+            for fmt in info['formats']:
+                if fmt.get('vcodec', 'none') != 'none' and fmt.get('height'):
+                    resolutions.add(f"{fmt['height']}p")
+
+            return Response({
+                'platform': platform,
+                'title': info.get('title'),
+                'thumbnail': info.get('thumbnail'),
+                'available_resolutions': sorted(list(resolutions), reverse=True),
+                'is_merge_required': True  # Instagram formats may still need merging
+            })
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+@api_view(['GET', 'POST'])
+def download_merged_video_instagram(request):
+    if request.method == 'GET':
+        url = request.query_params.get("url")
+        resolution = request.query_params.get("resolution")
+    else:
+        url = request.data.get("url")
+        resolution = request.data.get("resolution")
+
+    if not url or not resolution:
+        return Response({'error': 'url and resolution are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        height = resolution.replace("p", "")
+        # format_string = f"bestvideo[height={height}]+bestaudio"
+
+        temp_dir = tempfile.mkdtemp()
+
+        info_opts = {
+            'quiet': True,
+            'skip_download': True,
+            'nocheckcertificate': True,
+        }
+
+        with yt_dlp.YoutubeDL(info_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            title = info.get('title', f"video_{uuid.uuid4()}")
+            safe_title = sanitize_filename(title)[:50]
+
+        output_file = os.path.join(temp_dir, f"{safe_title}.mp4")
+
+        ydl_opts = {
+            'format': 'best',
+            'outtmpl': output_file,
+            'merge_output_format': 'mp4',
+            'quiet': True,
+            'nocheckcertificate': True,
+        }
+
+        # Add cookies if Instagram
+        if "instagram" in url:
+            ydl_opts['cookiefile'] = 'cookies.txt'  # make sure this file exists!
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
