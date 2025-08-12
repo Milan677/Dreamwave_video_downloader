@@ -345,6 +345,13 @@ def download_merged_video(request):
             'merge_output_format': 'mp4',
             'quiet': True,
             'nocheckcertificate': True,
+            'prefer_ffmpeg': True,
+            'postprocessors': [
+                {
+                    'key': 'FFmpegVideoConvertor',
+                    'preferedformat': 'mp4'
+                }
+            ]
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -397,7 +404,8 @@ def download_merged_video(request):
 
 
 
-#.......... instagram............................
+#.......... instagram and facebook ............................
+
 from urllib.parse import urlparse
 
 @api_view(['POST'])
@@ -491,3 +499,6 @@ def download_merged_video_instagram(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+#...................... Instagram ...................................
+
