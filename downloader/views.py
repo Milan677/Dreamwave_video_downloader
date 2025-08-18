@@ -269,6 +269,16 @@ def video_meta_view(request):
     url = request.data.get("url")
     if not url:
         return Response({'error': 'URL is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Check if the URL belongs to YouTube
+    parsed_url = urlparse(url)
+    allowed_domains = ["youtube.com", "www.youtube.com", "youtu.be", "m.youtube.com"]
+
+    if parsed_url.netloc not in allowed_domains:
+        return Response(
+            {"error": "Only YouTube URLs are supported."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     try:
         ydl_opts = {
